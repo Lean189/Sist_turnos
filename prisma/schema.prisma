@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+  CLIENT
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+model Business {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logo        String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  services    Service[]
+  staff       Staff[]
+  appointments Appointment[]
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String?
+  name          String?
+  role          UserRole  @default(CLIENT)
+  image         String?
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  staffProfile  Staff?
+  appointments  Appointment[] @relation("ClientAppointments")
+}
+
+model Staff {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id])
+  title       String?
+  bio         String?
+  
+  services    Service[] @relation("StaffServices")
+  workingHours WorkingHours[]
+  appointments Appointment[]
+  blockedSlots BlockedSlot[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  duration    Int      // duration in minutes
+  price       Float?
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id])
+  
+  staff       Staff[]  @relation("StaffServices")
+  appointments Appointment[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WorkingHours {
+  id        String   @id @default(cuid())
+  staffId   String
+  staff     Staff    @relation(fields: [staffId], references: [id])
+  dayOfWeek Int      // 0 (Sunday) to 6 (Saturday)
+  startTime String   // "HH:mm"
+  endTime   String   // "HH:mm"
+  isActive  Boolean  @default(true)
+
+  @@unique([staffId, dayOfWeek])
+}
+
+model Appointment {
+  id          String            @id @default(cuid())
+  status      AppointmentStatus @default(PENDING)
+  startTime   DateTime
+  endTime     DateTime
+  notes       String?
+  
+  clientId    String
+  client      User              @relation("ClientAppointments", fields: [clientId], references: [id])
+  
+  staffId     String
+  staff       Staff             @relation(fields: [staffId], references: [id])
+  
+  serviceId   String
+  service     Service           @relation(fields: [serviceId], references: [id])
+  
+  businessId  String
+  business    Business          @relation(fields: [businessId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([startTime, endTime])
+}
+
+model BlockedSlot {
+  id        String   @id @default(cuid())
+  staffId   String
+  staff     Staff    @relation(fields: [staffId], references: [id])
+  startTime DateTime
+  endTime   DateTime
+  reason    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  type      String   // appointment_booked, appointment_cancelled, etc.
+  link      String?
+  createdAt DateTime @default(now())
+}
