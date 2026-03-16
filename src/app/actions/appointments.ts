@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { getAvailableSlots } from "@/lib/availability";
 import { revalidatePath } from "next/cache";
-import { isBefore, addMinutes } from "date-fns";
+import { addMinutes } from "date-fns";
 
 /**
  * Obtener slots libres para un staff, día y servicio específico.
