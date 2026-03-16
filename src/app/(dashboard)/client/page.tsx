@@ -4,6 +4,7 @@ import { useState } from "react";
 import { 
   Calendar, 
   Clock, 
+  User,
   MapPin, 
   MoreVertical, 
   XCircle, 
