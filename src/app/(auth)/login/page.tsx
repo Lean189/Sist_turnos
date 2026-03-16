@@ -90,7 +90,7 @@ function LoginContent() {
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="password" dclassName="block text-sm font-bold text-foreground ml-1">
+              <label htmlFor="password" className="block text-sm font-bold text-foreground ml-1">
                 Contraseña
               </label>
               <input
