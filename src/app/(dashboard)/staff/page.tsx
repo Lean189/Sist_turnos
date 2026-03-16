@@ -76,11 +76,11 @@ export default function StaffSchedulePage() {
                         {appointment.status !== "blocked" ? (
                           <>
                             <div className="h-10 w-10 rounded-xl bg-background flex items-center justify-center border font-bold text-primary shadow-sm">
-                              {appointment.client[0]}
+                              {appointment.client ? appointment.client[0] : '?'}
                             </div>
                             <div>
-                              <h4 className="font-bold">{appointment.client}</h4>
-                              <p className="text-xs text-muted-foreground">{appointment.service} • {appointment.duration} min</p>
+                              <h4 className="font-bold">{appointment.client || 'Cliente bloqueado'}</h4>
+                              <p className="text-xs text-muted-foreground">{appointment.service} {appointment.duration ? `• ${appointment.duration} min` : ''}</p>
                             </div>
                           </>
                         ) : (
