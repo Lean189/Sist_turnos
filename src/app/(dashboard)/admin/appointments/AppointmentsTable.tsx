@@ -21,8 +21,8 @@ interface Appointment {
   status: string;
   notes: string | null;
   client: { name: string | null; email: string };
-  service: { name: string; price: number; duration: number };
-  staff: { user: { name: string } };
+  service: { name: string; price: number | null; duration: number };
+  staff: { user: { name: string | null } };
 }
 
 interface AppointmentsTableProps {

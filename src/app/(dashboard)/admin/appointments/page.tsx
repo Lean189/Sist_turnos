@@ -13,7 +13,7 @@ export default async function AdminAppointmentsPage() {
 
   const businessId = session.user.businessId;
   const result = await getAppointments(businessId);
-  const appointments = result.success ? result.appointments : [];
+  const appointments = result.success ? (result.appointments ?? []) : [];
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
