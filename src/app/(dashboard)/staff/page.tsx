@@ -1,26 +1,40 @@
-"use client";
-
 import { 
-  PauseCircle,
   ChevronLeft,
   ChevronRight,
-  MoreHorizontal
+  MoreHorizontal,
+  Calendar
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format, startOfToday, addHours, setHours, setMinutes } from "date-fns";
+import { format, startOfToday, addHours, setHours, setMinutes, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getStaffProfile, getStaffUpcomingAppointments } from "@/app/actions/appointments";
+import { redirect } from "next/navigation";
 
-const today = startOfToday();
-const hours = Array.from({ length: 12 }, (_, i) => addHours(setHours(setMinutes(today, 0), 8), i));
+export default async function StaffSchedulePage() {
+  const session = await getServerSession(authOptions);
 
-const appointments = [
-  { id: "1", client: "Ana García", service: "Consulta General", time: "09:00", duration: 30, status: "completed" },
-  { id: "2", client: "Carlos Ruiz", service: "Limpieza Dental", time: "10:30", duration: 45, status: "confirmed" },
-  { id: "3", client: "Elena Sanz", service: "Ortodoncia", time: "12:00", duration: 60, status: "confirmed" },
-  { id: "4", time: "14:00", status: "blocked", reason: "Almuerzo" },
-];
+  if (!session || (session.user.role !== "STAFF" && session.user.role !== "ADMIN")) {
+    redirect("/login");
+  }
 
-export default function StaffSchedulePage() {
+  const staffResult = await getStaffProfile(session.user.id);
+  if (!staffResult.success || !staffResult.staff) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <h2 className="text-xl font-bold">Perfil de Staff no encontrado</h2>
+        <p className="text-muted-foreground">Contacta al administrador para activar tu perfil.</p>
+      </div>
+    );
+  }
+
+  const staffId = staffResult.staff.id;
+  const today = startOfToday();
+  const appointmentsResult = await getStaffUpcomingAppointments(staffId);
+  const dbAppointments = (appointmentsResult.success && appointmentsResult.appointments) ? appointmentsResult.appointments : [];
+
+  const hours = Array.from({ length: 12 }, (_, i) => addHours(setHours(setMinutes(today, 0), 8), i));
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -42,7 +56,6 @@ export default function StaffSchedulePage() {
       </div>
 
       <div className="bg-card border rounded-3xl overflow-hidden shadow-sm relative">
-        {/* Timeline headers */}
         <div className="hidden md:grid grid-cols-[100px_1fr] border-b bg-muted/30">
           <div className="p-4 text-xs font-bold text-muted-foreground uppercase text-center border-r">Hora</div>
           <div className="p-4 text-xs font-bold text-muted-foreground uppercase pl-8">Actividad</div>
@@ -51,7 +64,11 @@ export default function StaffSchedulePage() {
         <div className="flex flex-col relative">
           {hours.map((hour, i) => {
             const timeStr = format(hour, "HH:mm");
-            const appointment = appointments.find(a => a.time === timeStr);
+            // Encontrar turnos que COMIENCEN en esta hora o estén dentro del rango
+            const appointmentsAtThisHour = dbAppointments.filter((a: { startTime: Date | string }) => {
+               const start = new Date(a.startTime);
+               return format(start, "HH:mm") === timeStr && isSameDay(start, today);
+            });
             
             return (
               <div key={i} className="grid grid-cols-[100px_1fr] min-h-[100px] border-b last:border-0 group relative hover:bg-muted/10 transition-colors">
@@ -59,46 +76,42 @@ export default function StaffSchedulePage() {
                   {timeStr}
                 </div>
                 <div className="p-4 relative">
-                  {appointment ? (
-                    <div className={cn(
-                      "rounded-2xl p-4 border flex items-center justify-between gap-4 transition-all hover:scale-[1.01]",
-                      appointment.status === "confirmed" ? "bg-primary/5 border-primary/20" : 
-                      appointment.status === "completed" ? "bg-muted/50 border-transparent opacity-80" :
+                  {appointmentsAtThisHour.length > 0 ? (appointmentsAtThisHour as {
+                    id: string;
+                    client: { name: string | null };
+                    service: { name: string, duration: number };
+                    status: string;
+                  }[]).map((appointment) => (
+                    <div key={appointment.id} className={cn(
+                      "rounded-2xl p-4 border flex items-center justify-between gap-4 transition-all hover:scale-[1.01] mb-2 last:mb-0",
+                      appointment.status === "CONFIRMED" ? "bg-primary/5 border-primary/20" : 
+                      appointment.status === "COMPLETED" ? "bg-muted/50 border-transparent opacity-80" :
                       "bg-orange-500/5 border-orange-500/20 italic"
                     )}>
                       <div className="flex items-center gap-4">
-                        {appointment.status !== "blocked" ? (
-                          <>
-                            <div className="h-10 w-10 rounded-xl bg-background flex items-center justify-center border font-bold text-primary shadow-sm">
-                              {appointment.client ? appointment.client[0] : '?'}
-                            </div>
-                            <div>
-                              <h4 className="font-bold">{appointment.client || 'Cliente bloqueado'}</h4>
-                              <p className="text-xs text-muted-foreground">{appointment.service} {appointment.duration ? `• ${appointment.duration} min` : ''}</p>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="flex items-center gap-3 text-orange-600">
-                            <PauseCircle className="h-5 w-5" />
-                            <span className="font-bold text-sm tracking-wide uppercase">Bloqueado: {appointment.reason}</span>
-                          </div>
-                        )}
+                        <div className="h-10 w-10 rounded-xl bg-background flex items-center justify-center border font-bold text-primary shadow-sm">
+                          {appointment.client.name ? appointment.client.name[0] : '?'}
+                        </div>
+                        <div>
+                          <h4 className="font-bold">{appointment.client.name || 'Cliente'}</h4>
+                          <p className="text-xs text-muted-foreground">
+                            {appointment.service.name} • {appointment.service.duration} min
+                          </p>
+                        </div>
                       </div>
                       
                       <div className="flex items-center gap-2">
-                        {appointment.status === "confirmed" && (
+                        {appointment.status === "CONFIRMED" && (
                           <button className="inline-flex h-9 items-center justify-center rounded-xl bg-primary px-4 text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all">
                             Marcar Completado
                           </button>
                         )}
-                        {appointment.status !== "blocked" && (
-                          <button className="p-2 rounded-xl text-muted-foreground hover:bg-accent transition-all">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </button>
-                        )}
+                        <button className="p-2 rounded-xl text-muted-foreground hover:bg-accent transition-all">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
-                  ) : (
+                  )) : (
                     <div className="h-full w-full border-2 border-dashed border-transparent hover:border-muted rounded-2xl flex items-center justify-center transition-all opacity-0 hover:opacity-100 cursor-pointer">
                       <span className="text-xs font-bold text-muted-foreground">+ Disponible</span>
                     </div>
@@ -108,10 +121,12 @@ export default function StaffSchedulePage() {
             );
           })}
           
-          {/* Current time indicator line - simplified mock */}
-          <div className="absolute left-0 right-0 top-1/4 h-0.5 bg-destructive/40 z-10 pointer-events-none">
-            <div className="absolute -left-1 -top-1 h-3 w-3 rounded-full bg-destructive shadow-sm"></div>
-          </div>
+          {dbAppointments.length === 0 && (
+             <div className="flex flex-col items-center justify-center py-20 opacity-30 pointer-events-none">
+                <Calendar className="h-12 w-12 mb-4" />
+                <p className="text-lg font-bold">Sin actividad agendada para hoy</p>
+             </div>
+          )}
         </div>
       </div>
     </div>

@@ -29,11 +29,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Usuario no encontrado");
         }
 
-        // Simplificación para desarrollo: si no empieza con $, asumimos texto plano
-        // En producción siempre usaremos bcrypt
-        const isValid = user.password.startsWith("$") 
-          ? await bcrypt.compare(credentials.password, user.password)
-          : user.password === credentials.password;
+        const isValid = await bcrypt.compare(credentials.password, user.password);
 
         if (!isValid) {
           throw new Error("Contraseña incorrecta");

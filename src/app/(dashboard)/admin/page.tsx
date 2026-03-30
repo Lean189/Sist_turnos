@@ -12,53 +12,80 @@ import { StatsCard } from "@/components/dashboard/stats-card";
 import { AppointmentsChart } from "@/components/dashboard/chart";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getDashboardStats, getAdminUpcomingAppointments } from "@/app/actions/appointments";
+import { redirect } from "next/navigation";
+import { format } from "date-fns";
 
-export default function AdminDashboard() {
+export default async function AdminDashboard() {
+  const session = await getServerSession(authOptions);
+
+  if (!session || session.user.role !== "ADMIN" || !session.user.businessId) {
+    redirect("/login");
+  }
+
+  const businessId = session.user.businessId as string;
+  const statsResult = await getDashboardStats(businessId);
+  const appointmentsResult = await getAdminUpcomingAppointments(businessId);
+
+  const stats = (statsResult.success && statsResult.stats) ? statsResult.stats : {
+    todayAppointments: 0,
+    totalClients: 0,
+    estimatedIncome: 0,
+    attendanceRate: "0"
+  };
+
+  const appointments = (appointmentsResult.success && appointmentsResult.appointments) ? appointmentsResult.appointments : [];
+
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Panel de Administración</h1>
-          <p className="text-muted-foreground mt-1">Bienvenido de nuevo. Aquí está lo que está pasando hoy.</p>
+          <p className="text-muted-foreground mt-1">Bienvenido de nuevo, {session.user.name}. Aquí está lo que está pasando hoy.</p>
         </div>
         <div className="flex items-center gap-3">
           <button className="inline-flex h-10 items-center justify-center rounded-xl border bg-background px-4 text-sm font-medium shadow-sm transition-all hover:bg-accent">
             Descargar Reporte
           </button>
-          <button className="inline-flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 hover:scale-105">
+          <Link 
+            href="/admin/appointments/new"
+            className="inline-flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 hover:scale-105"
+          >
             + Nuevo Turno
-          </button>
+          </Link>
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatsCard
           title="Turnos Hoy"
-          value="24"
+          value={stats.todayAppointments.toString()}
           icon={Calendar}
-          trend={{ value: 12, isPositive: true }}
-          description="8 pendientes de confirmar"
+          trend={{ value: 0, isPositive: true }}
+          description="En el día de hoy"
         />
         <StatsCard
           title="Total Clientes"
-          value="1,284"
+          value={stats.totalClients.toString()}
           icon={Users}
-          trend={{ value: 4, isPositive: true }}
-          description="48 nuevos este mes"
+          trend={{ value: 0, isPositive: true }}
+          description="Clientes registrados"
         />
         <StatsCard
-          title="Ingresos Estimados"
-          value="$12,450"
+          title="Ingresos (Mes)"
+          value={`$${stats.estimatedIncome.toLocaleString()}`}
           icon={DollarSign}
-          trend={{ value: 8, isPositive: true }}
-          description="Basado en turnos del mes"
+          trend={{ value: 0, isPositive: true }}
+          description="Estimado este mes"
         />
         <StatsCard
-          title="Tasa de Asistencia"
-          value="94.2%"
+          title="Tasa Asistencia"
+          value={`${stats.attendanceRate}%`}
           icon={TrendingUp}
-          trend={{ value: 2, isPositive: false }}
-          description="-2.1% respecto al mes anterior"
+          trend={{ value: 0, isPositive: true }}
+          description="Turnos completados"
         />
       </div>
 
@@ -69,11 +96,6 @@ export default function AdminDashboard() {
               <h3 className="text-xl font-bold tracking-tight">Actividad Semanal</h3>
               <p className="text-sm text-muted-foreground">Volumen de turnos por día</p>
             </div>
-            <select className="bg-muted/50 border-none rounded-xl text-sm px-3 py-2 outline-hidden">
-              <input type="checkbox" className="hidden" />
-              <option>Esta Semana</option>
-              <option>Mes Pasado</option>
-            </select>
           </div>
           <div className="h-[300px]">
             <AppointmentsChart />
@@ -83,43 +105,51 @@ export default function AdminDashboard() {
         <div className="bg-card border rounded-3xl p-8 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-xl font-bold tracking-tight">Próximos Turnos</h3>
-            <Link href="/admin/schedule" className="text-xs font-bold text-primary hover:underline">Ver todos</Link>
+            <Link href="/admin/appointments" className="text-xs font-bold text-primary hover:underline">Ver todos</Link>
           </div>
           <div className="space-y-6 flex-1">
-            {[
-              { name: "Ana García", service: "Consulta General", time: "10:30 AM", status: "confirmed" },
-              { name: "Carlos Ruiz", service: "Limpieza Dental", time: "11:15 AM", status: "pending" },
-              { name: "Elena Sanz", service: "Ortodoncia", time: "12:00 PM", status: "confirmed" },
-              { name: "Roberto Gómez", service: "Extracción", time: "01:30 PM", status: "confirmed" },
-            ].map((appointment, i) => (
+            {appointments.length > 0 ? (appointments as { 
+              client: { name: string | null }; 
+              service: { name: string }; 
+              startTime: Date | string; 
+              status: string 
+            }[]).map((appointment, i) => (
               <div key={i} className="flex items-center justify-between group cursor-pointer border-b border-transparent hover:border-border pb-2 transition-all">
                 <div className="flex items-center gap-4">
                   <div className="h-10 w-10 rounded-2xl bg-muted flex items-center justify-center font-bold text-sm text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                    {appointment.name[0]}
+                    {appointment.client.name ? appointment.client.name[0] : '?'}
                   </div>
                   <div>
-                    <p className="text-sm font-bold">{appointment.name}</p>
-                    <p className="text-xs text-muted-foreground">{appointment.service}</p>
+                    <p className="text-sm font-bold">{appointment.client.name || 'Cliente'}</p>
+                    <p className="text-xs text-muted-foreground">{appointment.service.name}</p>
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="flex items-center gap-1 text-xs font-bold mb-1">
                     <Clock className="h-3 w-3" />
-                    {appointment.time}
+                    {format(new Date(appointment.startTime), "HH:mm")}
                   </div>
                   <div className={cn(
                     "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full inline-block",
-                    appointment.status === "confirmed" ? "bg-green-500/10 text-green-600" : "bg-orange-500/10 text-orange-600"
+                    appointment.status === "CONFIRMED" ? "bg-green-500/10 text-green-600" : "bg-orange-500/10 text-orange-600"
                   )}>
-                    {appointment.status === "confirmed" ? "Confirmado" : "Pendiente"}
+                    {appointment.status === "CONFIRMED" ? "Confirmado" : "Pendiente"}
                   </div>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="flex flex-col items-center justify-center h-full text-center py-10 opacity-50">
+                <Calendar className="h-10 w-10 mb-2" />
+                <p className="text-sm font-medium">No hay turnos próximos</p>
+              </div>
+            )}
           </div>
-          <button className="w-full mt-6 py-3 rounded-2xl bg-muted/50 text-sm font-bold text-muted-foreground hover:bg-muted hover:text-foreground transition-all flex items-center justify-center gap-2">
+          <Link 
+            href="/admin/appointments"
+            className="w-full mt-6 py-3 rounded-2xl bg-muted/50 text-sm font-bold text-muted-foreground hover:bg-muted hover:text-foreground transition-all flex items-center justify-center gap-2"
+          >
             Gestionar Agenda <ChevronRight className="h-4 w-4" />
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -132,9 +162,12 @@ export default function AdminDashboard() {
             <h3 className="text-xl font-bold mb-2">Configura tu Negocio</h3>
             <p className="text-primary-foreground/80 text-sm mb-6">Completa la información de tu perfil profesional para recibir pagos online.</p>
           </div>
-          <button className="bg-white text-primary px-6 py-2 rounded-xl text-sm font-bold hover:bg-white/90 transition-all self-start relative">
+          <Link 
+            href="/admin/settings"
+            className="bg-white text-primary px-6 py-2 rounded-xl text-sm font-bold hover:bg-white/90 transition-all self-start relative"
+          >
             Configurar
-          </button>
+          </Link>
         </div>
         
         <div className="md:col-span-2 bg-card border rounded-3xl p-8 shadow-sm flex items-center justify-between overflow-hidden relative">

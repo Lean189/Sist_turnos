@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition, useEffect, useCallback } from "react";
+import { useState, useTransition, useEffect, useCallback, useRef } from "react";
+import { useSession } from "next-auth/react";
 import { 
   Calendar as CalendarIcon, 
   Clock, 
@@ -19,27 +20,70 @@ import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { fetchAvailableSlots, createAppointment } from "@/app/actions/appointments";
 
+interface Service {
+  id: string;
+  name: string;
+  description?: string;
+  price: number;
+  duration: number;
+}
+
+interface Staff {
+  id: string;
+  title?: string;
+  user: {
+    name: string;
+    image?: string;
+  };
+  services: { id: string }[];
+}
+
+interface Slot {
+  startTime: string;
+  displayTime: string;
+}
+
 interface BookingClientProps {
-  business: any;
+  business: {
+    id: string;
+    name: string;
+    logo?: string;
+    services: Service[];
+    staff: Staff[];
+  };
 }
 
 type Step = "service" | "staff" | "date" | "confirm" | "success";
 
 export default function BookingClient({ business }: BookingClientProps) {
   const [step, setStep] = useState<Step>("service");
-  const [selectedService, setSelectedService] = useState<any>(null);
-  const [selectedStaff, setSelectedStaff] = useState<any>(null);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
-  const [selectedSlot, setSelectedSlot] = useState<any>(null);
-  const [slots, setSlots] = useState<any[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
+  const [slots, setSlots] = useState<Slot[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  const { data: session } = useSession();
+  const prefilled = useRef(false);
   const [contactInfo, setContactInfo] = useState({
     name: "",
     email: "",
     notes: ""
   });
+
+  // Prefill contact info if user is logged in
+  useEffect(() => {
+    if (session?.user && !prefilled.current) {
+      setContactInfo(prev => ({
+        ...prev,
+        name: session.user.name || prev.name,
+        email: session.user.email || prev.email
+      }));
+      prefilled.current = true;
+    }
+  }, [session]);
 
   const loadSlots = useCallback(async () => {
     if (!selectedStaff || !selectedService) return;
@@ -60,14 +104,34 @@ export default function BookingClient({ business }: BookingClientProps) {
     if (!selectedSlot || !contactInfo.name || !contactInfo.email) return;
 
     startTransition(async () => {
-      const result = await createAppointment({
+      if (!selectedStaff || !selectedService || !selectedSlot) return;
+      
+      const bookingData: {
+        businessId: string;
+        staffId: string;
+        serviceId: string;
+        startTime: string;
+        notes: string;
+        clientId?: string;
+        guestData?: { name: string; email: string };
+      } = {
         businessId: business.id,
         staffId: selectedStaff.id,
         serviceId: selectedService.id,
-        clientId: "temp-guest-id", 
         startTime: selectedSlot.startTime,
         notes: contactInfo.notes
-      });
+      };
+
+      if (session?.user?.id) {
+        bookingData.clientId = session.user.id;
+      } else {
+        bookingData.guestData = {
+          name: contactInfo.name,
+          email: contactInfo.email
+        };
+      }
+
+      const result = await createAppointment(bookingData);
 
       if (result.success) {
         setStep("success");
@@ -151,7 +215,7 @@ export default function BookingClient({ business }: BookingClientProps) {
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <h2 className="text-2xl font-black mb-6">Elige un servicio</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {business.services.map((service: any) => (
+                {business.services.map((service) => (
                   <button
                     key={service.id}
                     onClick={() => {
@@ -188,7 +252,7 @@ export default function BookingClient({ business }: BookingClientProps) {
               </button>
               <h2 className="text-2xl font-black mb-6">Elige quién te atenderá</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {business.staff.filter((s: any) => s.services.some((ser: any) => ser.id === selectedService.id)).map((staff: any) => (
+                {business.staff.filter((s) => s.services.some((ser) => ser.id === selectedService?.id)).map((staff) => (
                   <button
                     key={staff.id}
                     onClick={() => {
@@ -327,7 +391,7 @@ export default function BookingClient({ business }: BookingClientProps) {
                     <div>
                       <p className="text-xs font-bold text-muted-foreground uppercase">Servicio y Staff</p>
                       <p className="text-sm font-black uppercase">
-                        {selectedService.name} con {selectedStaff.user.name}
+                        {selectedService?.name} con {selectedStaff?.user.name}
                       </p>
                     </div>
                   </div>
