@@ -23,17 +23,17 @@ import { fetchAvailableSlots, createAppointment } from "@/app/actions/appointmen
 interface Service {
   id: string;
   name: string;
-  description?: string;
-  price: number;
+  description: string | null;
+  price: number | null;
   duration: number;
 }
 
 interface Staff {
   id: string;
-  title?: string;
+  title: string | null;
   user: {
-    name: string;
-    image?: string;
+    name: string | null;
+    image: string | null;
   };
   services: { id: string }[];
 }
@@ -47,7 +47,7 @@ interface BookingClientProps {
   business: {
     id: string;
     name: string;
-    logo?: string;
+    logo: string | null;
     services: Service[];
     staff: Staff[];
   };
@@ -148,7 +148,7 @@ export default function BookingClient({ business }: BookingClientProps) {
           <img src={business.logo} alt={business.name} className="h-12 w-12 rounded-2xl object-cover shadow-sm" />
         ) : (
           <div className="h-12 w-12 rounded-2xl bg-primary flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary/20">
-            {business.name[0]}
+            {business.name?.[0] || '?'}
           </div>
         )}
         <div>
@@ -263,10 +263,10 @@ export default function BookingClient({ business }: BookingClientProps) {
                   >
                     <div className="h-16 w-16 rounded-2xl bg-muted overflow-hidden border-2 border-white shadow-sm mr-4">
                       {staff.user.image ? (
-                        <img src={staff.user.image} alt={staff.user.name} className="h-full w-full object-cover" />
+                        <img src={staff.user.image} alt={staff.user.name || 'Profesional'} className="h-full w-full object-cover" />
                       ) : (
                         <div className="h-full w-full flex items-center justify-center bg-primary text-white font-black text-xl">
-                          {staff.user.name[0]}
+                          {staff.user.name?.[0] || '?'}
                         </div>
                       )}
                     </div>
